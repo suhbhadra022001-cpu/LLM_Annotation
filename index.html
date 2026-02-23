@@ -1338,5 +1338,28 @@ function toggleUser(header) {
 // ═══════════════════════════════════════════
 updateLoginStats();
 </script>
+  <script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs } 
+from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCR_cSamxJM2k2PAyw-6VeVyhatWjF_zoQ",
+  authDomain: "annotation-tool-c8eb3.firebaseapp.com",
+  projectId: "annotation-tool-c8eb3",
+  storageBucket: "annotation-tool-c8eb3.firebasestorage.app",
+  messagingSenderId: "1071651481777",
+  appId: "1:1071651481777:web:43bd9f0386c5bfbf005a90"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+window.db = db;
+window.collection = collection;
+window.addDoc = addDoc;
+window.getDocs = getDocs;
+</script>
 </body>
+
 </html>
