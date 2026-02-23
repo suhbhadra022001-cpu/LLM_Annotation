@@ -1161,13 +1161,16 @@ function backFromAdmin() {
 function renderAdmin() {
   const store = loadStore();
   const totalAnns = Object.keys(store.annotators).length;
-  const totalResp = store.responses.length;
+  const totalResp = store.responses.reduce(
+  (sum, r) => sum + r.annotation_response.annotations.length,
+  0
+);
   const totalAnnotations = store.responses.reduce((a,r) => a + r.annotation_response.annotations.length, 0);
   const totalSegs = store.responses.reduce((a,r) => a + r.annotation_response.annotations.reduce((b,ann) => b + ann.segments.length, 0), 0);
 
   document.getElementById('admin-stats').innerHTML = `
     <div class="stat-card"><div class="stat-n">${totalAnns}</div><div class="stat-l">Unique Annotators</div></div>
-    <div class="stat-card"><div class="stat-n">${totalResp}</div><div class="stat-l">Tasks with Responses</div></div>
+    <div class="stat-card"><div class="stat-n">${totalResp}</div><div class="stat-l">Total Submissions</div></div>
     <div class="stat-card"><div class="stat-n">${totalAnnotations}</div><div class="stat-l">Total Annotations</div></div>
     <div class="stat-card"><div class="stat-n">${totalSegs}</div><div class="stat-l">Total Segments Labeled</div></div>
   `;
@@ -1363,3 +1366,4 @@ window.getDocs = getDocs;
 </body>
 
 </html>
+
