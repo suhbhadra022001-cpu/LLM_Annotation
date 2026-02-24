@@ -4,6 +4,30 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Prompt Attack Annotation Tool</title>
+
+  <script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCR_cSamxJM2k2PAyw-6VeVyhatWjF_zoQ",
+  authDomain: "annotation-tool-c8eb3.firebaseapp.com",
+  projectId: "annotation-tool-c8eb3",
+  storageBucket: "annotation-tool-c8eb3.firebasestorage.app",
+  messagingSenderId: "1071651481777",
+  appId: "1:1071651481777:web:43bd9f0386c5bfbf005a90",
+  measurementId: "G-2JTHNEFDLT"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+window.db = db;
+window.collection = collection;
+window.addDoc = addDoc;
+window.getDocs = getDocs;
+</script>
+  
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -424,13 +448,6 @@ const SEG_DOT_COLORS = ['#f57c00','#0288d1','#388e3c','#7b1fa2','#c62828'];
 // ═══════════════════════════════════════════
 // STORAGE KEY
 // ═══════════════════════════════════════════
-const STORE_KEY = 'pa_annotations_v2';
-
-function loadStore() {
-  try { return JSON.parse(localStorage.getItem(STORE_KEY)) || { annotators:{}, responses:[] }; }
-  catch(e) { return { annotators:{}, responses:[] }; }
-}
-function saveStore(s) { localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
 
 // ═══════════════════════════════════════════
 // APP STATE
@@ -457,11 +474,6 @@ function initWS(taskId) {
 // ═══════════════════════════════════════════
 // LOGIN (email must end with @handigital.com, password = admin123)
 // ═══════════════════════════════════════════
-function updateLoginStats() {
-  const store = loadStore();
-  document.getElementById('ls-ann').textContent = Object.keys(store.annotators).length;
-  document.getElementById('ls-resp').textContent = store.responses.length;
-}
 
 function doLogin() {
   const email = document.getElementById('login-email').value.trim().toLowerCase();
@@ -474,17 +486,6 @@ function doLogin() {
   const localPart = email.split('@')[0];
   ANN = { name: localPart, id: email };
 
-  const store = loadStore();
-  if (!store.annotators[email]) store.annotators[email] = { name: localPart, id: email, firstSeen: new Date().toISOString() };
-  saveStore(store);
-
-  SESSION_START = Date.now();
-  CUR_TASK_IDX = 0;
-
-  // Find first incomplete task for this annotator
-  const done = store.responses.filter(r => r.annotation_response.annotations.some(a => a.annotator_id === email)).map(r => r.input_data.id);
-  const firstIncomplete = TASKS.findIndex(t => !done.includes(t.id));
-  CUR_TASK_IDX = firstIncomplete === -1 ? TASKS.length : firstIncomplete;
 
   document.getElementById('screen-login').classList.remove('active');
 
@@ -512,11 +513,10 @@ function doLogout() {
 // TASK QUEUE RENDER
 // ═══════════════════════════════════════════
 function renderTaskQueue() {
-  const store = loadStore();
-  const done = store.responses.filter(r => r.annotation_response.annotations.some(a => a.annotator_id === ANN.id)).map(r => r.input_data.id);
+ 
   const qc = document.getElementById('task-queue');
   qc.innerHTML = TASKS.map((t, i) => {
-    const isDone = done.includes(t.id);
+    const isDone = false;
     const isActive = i === CUR_TASK_IDX;
     const at = t.attack_type === 'Prompt Injection' ? 'PI' : t.attack_type === 'Prompt Leakage' ? 'PL' : 'JB';
     const cls = isDone ? 'done' : isActive ? 'active' : '';
@@ -557,11 +557,6 @@ function updateHeader(idx) {
   const pct = Math.round((done / TASKS.length) * 100);
   document.getElementById('ah-progress').style.width = pct + '%';
   document.getElementById('ah-pct').textContent = pct + '%';
-}
-
-function countDone() {
-  const store = loadStore();
-  return store.responses.filter(r => r.annotation_response.annotations.some(a => a.annotator_id === ANN.id)).length;
 }
 
 // ═══════════════════════════════════════════
@@ -998,12 +993,6 @@ function submitAnnotation(taskId) {
   const submissionTime = new Date().toISOString();
   const timeSpent = Math.round((new Date(submissionTime) - new Date(ws.acceptanceTime)) / 1000);
 
-  const store = loadStore();
-  // Find existing task record or create
-  let taskRecord = store.responses.find(r => r.input_data.id === taskId);
-  const judgementIdx = taskRecord ? taskRecord.annotation_response.annotations.length + 1 : 1;
-  const judgementId = `${taskId}-${String(judgementIdx).padStart(2,'0')}`;
-
   const annotation = {
     judgement_id: judgementId,
     annotator_id: ANN.id,
@@ -1060,8 +1049,6 @@ function submitAnnotation(taskId) {
   if (taskRecord.annotation_response.annotations.length >= 2) {
     taskRecord.annotation_response.consensus_result = computeConsensus(taskRecord.annotation_response.annotations);
   }
-
-  saveStore(store);
 
   // Move to next task
   CUR_TASK_IDX++;
@@ -1125,20 +1112,9 @@ function majority(arr) {
 function showDoneScreen() {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-done').classList.add('active');
-  const store = loadStore();
-  const myAnns = store.responses.filter(r => r.annotation_response.annotations.some(a => a.annotator_id === ANN.id));
-  let totalSegs = 0;
-  myAnns.forEach(r => r.annotation_response.annotations.filter(a => a.annotator_id === ANN.id).forEach(a => { totalSegs += a.segments.length; }));
-  const mins = SESSION_START ? Math.round((Date.now() - SESSION_START) / 60000) : '—';
-  document.getElementById('done-tasks').textContent = myAnns.length;
-  document.getElementById('done-segs').textContent = totalSegs;
-  document.getElementById('done-time').textContent = mins;
 }
 
 function downloadMyJSON() {
-  const store = loadStore();
-  const myData = store.responses.filter(r => r.annotation_response.annotations.some(a => a.annotator_id === ANN.id));
-  downloadBlob(JSON.stringify(myData, null, 2), `annotations_${ANN.id}.json`, 'application/json');
 }
 
 // ═══════════════════════════════════════════
@@ -1158,26 +1134,28 @@ function backFromAdmin() {
   document.getElementById(prevScreen)?.classList.add('active');
 }
 
-function renderAdmin() {
-  const store = loadStore();
-  const totalAnns = Object.keys(store.annotators).length;
-  const totalResp = store.responses.reduce(
-  (sum, r) => sum + r.annotation_response.annotations.length,
-  0
-);
-  const totalAnnotations = store.responses.reduce((a,r) => a + r.annotation_response.annotations.length, 0);
-  const totalSegs = store.responses.reduce((a,r) => a + r.annotation_response.annotations.reduce((b,ann) => b + ann.segments.length, 0), 0);
+async function renderAdmin() {
+const querySnapshot = await getDocs(collection(db, "responses"));
+
+  let totalSubmissions = 0;
+  let totalSegments = 0;
+  let uniqueUsers = new Set();
+
+  querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      totalSubmissions++;
+      totalSegments += data.segmentsCount || 0;
+      uniqueUsers.add(data.userEmail);
+  });
+
+  const totalUsers = uniqueUsers.size;
 
   document.getElementById('admin-stats').innerHTML = `
-    <div class="stat-card"><div class="stat-n">${totalAnns}</div><div class="stat-l">Unique Annotators</div></div>
-    <div class="stat-card"><div class="stat-n">${totalResp}</div><div class="stat-l">Total Submissions</div></div>
-    <div class="stat-card"><div class="stat-n">${totalAnnotations}</div><div class="stat-l">Total Annotations</div></div>
-    <div class="stat-card"><div class="stat-n">${totalSegs}</div><div class="stat-l">Total Segments Labeled</div></div>
+    <div class="stat-card"><div class="stat-n">${totalUsers}</div><div class="stat-l">Unique Annotators</div></div>
+    <div class="stat-card"><div class="stat-n">${totalSubmissions}</div><div class="stat-l">Total Submissions</div></div>
+    <div class="stat-card"><div class="stat-n">${totalSubmissions}</div><div class="stat-l">Total Annotations</div></div>
+    <div class="stat-card"><div class="stat-n">${totalSegments}</div><div class="stat-l">Total Segments Labeled</div></div>
   `;
-
-  if (!totalAnnotations) {
-    document.getElementById('admin-table-wrap').innerHTML = '<div style="color:var(--muted);font-family:\'IBM Plex Mono\',monospace;font-size:12px;padding:20px">No responses yet.</div>';
-    return;
   }
 
   const rows = [];
@@ -1210,35 +1188,39 @@ function renderAdmin() {
       </table>
     </div>`;
 }
+  async function downloadAllJSON() {
+  const querySnapshot = await getDocs(collection(db, "responses"));
+  let allData = [];
 
-function downloadAllJSON() {
-  const store = loadStore();
-  downloadBlob(JSON.stringify(store.responses, null, 2), 'all_annotations.json', 'application/json');
-}
-
-function downloadAllCSV() {
-  const store = loadStore();
-  const headers = ['task_id','attack_type','sub_attack_type','annotator_id','annotator_name','judgement_id','acceptance_time','submission_time','time_spent_seconds','label_accuracy','segment_id','highlighted_text','attack_position_start','attack_position_end','corrected_type_label','user_intent','harm_category','harm_intensity'];
-  const rows = [headers.join(',')];
-  store.responses.forEach(r => {
-    r.annotation_response.annotations.forEach(ann => {
-      ann.segments.forEach(seg => {
-        const cats = Array.isArray(seg.harm_category) ? seg.harm_category.join('|') : seg.harm_category;
-        rows.push([
-          r.input_data.id, r.input_data.attack_type, r.input_data.sub_attack_type_name,
-          ann.annotator_id, ann.annotator_name || '',
-          ann.judgement_id, ann.acceptance_time, ann.submission_time,
-          ann.time_spent_seconds, ann.attack_type_label_accuracy,
-          seg.segment_id,
-          `"${(seg.highlighted_text||'').replace(/"/g,'""').replace(/\n/g,' ')}"`,
-          seg.attack_position[0], seg.attack_position[1],
-          seg.corrected_attack_type_label || '',
-          seg.user_intent, cats, seg.harm_intensity
-        ].map(v => `"${String(v ?? '').replace(/"/g,'""')}"`).join(','));
-      });
-    });
+  querySnapshot.forEach((doc) => {
+      allData.push(doc.data());
   });
-  downloadBlob(rows.join('\n'), 'all_annotations.csv', 'text/csv');
+
+  downloadBlob(
+    JSON.stringify(allData, null, 2),
+    'all_annotations.json',
+    'application/json'
+  );
+}
+  async function downloadAllCSV() {
+  const querySnapshot = await getDocs(collection(db, "responses"));
+  let rows = [];
+
+  querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      rows.push([
+        data.taskId,
+        data.attackType,
+        data.userEmail,
+        data.segmentsCount
+      ].join(","));
+  });
+
+  downloadBlob(
+    rows.join("\n"),
+    'all_annotations.csv',
+    'text/csv'
+  );
 }
 
 function downloadBlob(content, filename, type) {
@@ -1280,25 +1262,36 @@ function logoutManager() {
   document.getElementById('manager-login-form').style.display = 'none';
 }
 
-function renderManagerPanel() {
-  const store = loadStore();
-  const container = document.getElementById('manager-body');
+  async function renderManagerPanel() {
+
+  const querySnapshot = await getDocs(collection(db, "responses"));
+  const container = document.getElementById("manager-body");
   const byUser = {};
 
-  // Group responses by annotator_id
-  store.responses.forEach(r => {
-    r.annotation_response.annotations.forEach(ann => {
-      const uid = ann.annotator_id;
-      if (!byUser[uid]) byUser[uid] = { name: ann.annotator_name, tasks: [] };
-      byUser[uid].tasks.push({
-        taskId: r.input_data.id,
-        attack_type: r.input_data.attack_type,
-        segments: ann.segments,
-        time: ann.submission_time
-      });
+  querySnapshot.forEach((doc) => {
+    const data = doc.data();
+
+    const uid = data.userEmail;
+
+    if (!byUser[uid]) {
+      byUser[uid] = { name: uid, tasks: [] };
+    }
+
+    byUser[uid].tasks.push({
+      taskId: data.taskId,
+      attack_type: data.attackType,
+      segments: data.segmentsCount,
+      time: data.submittedAt
     });
   });
 
+  container.innerHTML = Object.values(byUser).map(user => `
+    <div class="manager-card">
+      <h3>${user.name}</h3>
+      <p>Total Tasks: ${user.tasks.length}</p>
+    </div>
+  `).join("");
+}
   if (Object.keys(byUser).length === 0) {
     container.innerHTML = '<div style="color:var(--muted); padding:20px;">No submissions yet.</div>';
     return;
@@ -1366,5 +1359,6 @@ window.getDocs = getDocs;
 </body>
 
 </html>
+
 
 
