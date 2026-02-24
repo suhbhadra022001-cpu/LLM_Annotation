@@ -1187,7 +1187,6 @@ const querySnapshot = await getDocs(collection(db, "responses"));
         <tbody>${rows.join('')}</tbody>
       </table>
     </div>`;
-}
   async function downloadAllJSON() {
   const querySnapshot = await getDocs(collection(db, "responses"));
   let allData = [];
@@ -1359,6 +1358,7 @@ window.getDocs = getDocs;
 </body>
 
 </html>
+
 
 
 
