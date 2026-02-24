@@ -1295,12 +1295,12 @@ function logoutManager() {
       <h3>${user.name}</h3>
       <p>Total Tasks: ${user.tasks.length}</p>
     </div>
-  `).join("");
-}
-  if (Object.keys(byUser).length === 0) {
+  `}).join("");
+
+if (Object.keys(byUser).length === 0) {
     container.innerHTML = '<div style="color:var(--muted); padding:20px;">No submissions yet.</div>';
     return;
-  }
+}
 
   let html = '';
   for (const uid in byUser) {
@@ -1364,6 +1364,7 @@ window.getDocs = getDocs;
 </body>
 
 </html>
+
 
 
 
