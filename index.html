@@ -1180,13 +1180,19 @@ const querySnapshot = await getDocs(collection(db, "responses"));
     });
   });
 
-  document.getElementById('admin-table-wrap').innerHTML = `
-    <div style="overflow-x:auto">
-      <table class="resp-table">
-        <thead><tr>${['Task ID','Annotator ID','Name','Judgement ID','Seg #','Text','Position','Intent','Harm Cat','Intensity','Corrected Type','Time'].map(h=>`<th>${h}</th>`).join('')}</tr></thead>
-        <tbody>${rows.join('')}</tbody>
-      </table>
-    </div>`;
+document.getElementById('admin-table-wrap').innerHTML = `
+  <div style="overflow-x:auto">
+    <table class="resp-table">
+      <thead>
+        <tr>
+          ${['Task ID','Annotator ID','Name','Judgement ID','Seg #','Text','Position','Intent','Harm Cat','Intensity','Time Spent']
+            .map(h => `<th>${h}</th>`).join('')}
+        </tr>
+      </thead>
+      <tbody>${rows.join('')}</tbody>
+    </table>
+  </div>
+`;
   async function downloadAllJSON() {
   const querySnapshot = await getDocs(collection(db, "responses"));
   let allData = [];
@@ -1358,6 +1364,7 @@ window.getDocs = getDocs;
 </body>
 
 </html>
+
 
 
 
