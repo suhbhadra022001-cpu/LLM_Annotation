@@ -987,70 +987,47 @@ function prevTask() {
 // ═══════════════════════════════════════════
 // SUBMIT
 // ═══════════════════════════════════════════
-function submitAnnotation(taskId) {
+  async function submitAnnotation(taskId) {
   const task = TASKS.find(t => t.id === taskId);
   const ws = WS[taskId];
-  const submissionTime = new Date().toISOString();
-  const timeSpent = Math.round((new Date(submissionTime) - new Date(ws.acceptanceTime)) / 1000);
 
-  const annotation = {
-    judgement_id: judgementId,
-    annotator_id: ANN.id,
-    annotator_name: ANN.name,
-    acceptance_time: ws.acceptanceTime,
-    submission_time: submissionTime,
-    time_spent_seconds: timeSpent,
-    attack_type_label_accuracy: ws.labelAccuracy,
+  const submissionTime = new Date();
+  const timeSpent = Math.round(
+    (submissionTime - new Date(ws.acceptanceTime)) / 1000
+  );
+
+  const payload = {
+    taskId: task.id,
+    attackType: task.attack_type,
+    userEmail: ANN.id,
+    userName: ANN.name,
+    submittedAt: submissionTime.toISOString(),
+    timeSpentSeconds: timeSpent,
+    labelAccuracy: ws.labelAccuracy,
+    segmentsCount: ws.segments.length,
     segments: ws.segments.map((seg, i) => {
       const lbl = ws.segLabels[seg.id] || {};
-      const cats = [...(lbl.harmCats || new Set())];
       return {
-        segment_id: i + 1,
-        highlighted_text: seg.text,
-        attack_position: [seg.start, seg.end],
-        corrected_attack_type_label: lbl.correctedType || null,
-        user_intent: lbl.intent || 'unspecified',
-        harm_category: cats.length === 1 ? cats[0] : cats.length > 1 ? cats : 'NA',
-        harm_intensity: lbl.intensity || 'NA'
+        segmentId: i + 1,
+        text: seg.text,
+        start: seg.start,
+        end: seg.end,
+        intent: lbl.intent || "unspecified",
+        harmCategories: [...(lbl.harmCats || [])],
+        intensity: lbl.intensity || "NA",
+        correctedType: lbl.correctedType || null
       };
     })
   };
 
-  if (!taskRecord) {
-    taskRecord = {
-      input_data: {
-        input: task.input,
-        completion: 'if LLM response is available',
-        attack_positions: task.attack_positions,
-        attack_type: task.attack_type,
-        sub_attack_type_name: task.sub_attack_type_name,
-        sub_attack_type_definition: task.sub_attack_type_definition,
-        prompt_style: task.prompt_style,
-        prompt_style_definition: task.prompt_style_definition,
-        length: task.length,
-        task_goal: task.task_goal,
-        task_goal_definition: task.task_goal_definition,
-        scenario_domain: task.scenario_domain,
-        implicit: task.implicit,
-        id: task.id
-      },
-      annotation_response: {
-        task_id: task.id,
-        annotations: [],
-        consensus_result: null
-      }
-    };
-    store.responses.push(taskRecord);
+  try {
+    await addDoc(collection(db, "responses"), payload);
+  } catch (err) {
+    alert("Error saving to Firestore");
+    console.error(err);
+    return;
   }
 
-  taskRecord.annotation_response.annotations.push(annotation);
-
-  // Compute consensus if 2+ annotations
-  if (taskRecord.annotation_response.annotations.length >= 2) {
-    taskRecord.annotation_response.consensus_result = computeConsensus(taskRecord.annotation_response.annotations);
-  }
-
-  // Move to next task
   CUR_TASK_IDX++;
   renderTaskQueue();
   updateHeader(CUR_TASK_IDX);
@@ -1061,79 +1038,6 @@ function submitAnnotation(taskId) {
     loadTask(CUR_TASK_IDX);
   }
 }
-
-function computeConsensus(annotations) {
-  const posMap = new Map();
-  annotations.forEach(ann => {
-    ann.segments.forEach(seg => {
-      const key = `${seg.attack_position[0]}_${seg.attack_position[1]}`;
-      if (!posMap.has(key)) posMap.set(key, { pos: seg.attack_position, votes: [] });
-      posMap.get(key).votes.push({ intent: seg.user_intent, category: Array.isArray(seg.harm_category) ? seg.harm_category[0] : seg.harm_category, intensity: seg.harm_intensity });
-    });
-  });
-
-  const n = annotations.length;
-  let totalAgree = 0, count = 0;
-  const segCons = [];
-
-  posMap.forEach((data, key) => {
-    const votes = data.votes;
-    const finalIntent = majority(votes.map(v => v.intent));
-    const finalCat = majority(votes.map(v => v.category));
-    const finalInt = majority(votes.map(v => v.intensity));
-    const agreeCount = votes.filter(v => v.intent === finalIntent).length;
-    const pct = agreeCount / n;
-    totalAgree += pct; count++;
-    segCons.push({
-      segment_id: segCons.length + 1,
-      attack_position: data.pos,
-      final_user_intent: finalIntent,
-      final_harm_category: finalCat,
-      final_harm_intensity: finalInt,
-      annotator_agreement: `${agreeCount}/${n}`
-    });
-  });
-
-  return {
-    segment_consensus: segCons,
-    overall_agreement_score: count ? +(totalAgree / count).toFixed(2) : 0,
-    resolution_method: 'majority_vote'
-  };
-}
-
-function majority(arr) {
-  const c = {}; arr.forEach(v => { c[v] = (c[v]||0)+1; });
-  return Object.entries(c).sort((a,b)=>b[1]-a[1])[0]?.[0] || null;
-}
-
-// ═══════════════════════════════════════════
-// DONE SCREEN
-// ═══════════════════════════════════════════
-function showDoneScreen() {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById('screen-done').classList.add('active');
-}
-
-function downloadMyJSON() {
-}
-
-// ═══════════════════════════════════════════
-// ADMIN
-// ═══════════════════════════════════════════
-let prevScreen = 'app';
-
-function showAdmin() {
-  prevScreen = document.querySelector('.screen.active')?.id || 'screen-app';
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById('screen-admin').classList.add('active');
-  renderAdmin();
-}
-
-function backFromAdmin() {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById(prevScreen)?.classList.add('active');
-}
-
 async function renderAdmin() {
 const querySnapshot = await getDocs(collection(db, "responses"));
 
@@ -1339,31 +1243,10 @@ function toggleUser(header) {
 // ═══════════════════════════════════════════
 updateLoginStats();
 </script>
-  <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs } 
-from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
-
-const firebaseConfig = {
-  apiKey: "AIzaSyCR_cSamxJM2k2PAyw-6VeVyhatWjF_zoQ",
-  authDomain: "annotation-tool-c8eb3.firebaseapp.com",
-  projectId: "annotation-tool-c8eb3",
-  storageBucket: "annotation-tool-c8eb3.firebasestorage.app",
-  messagingSenderId: "1071651481777",
-  appId: "1:1071651481777:web:43bd9f0386c5bfbf005a90"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-
-window.db = db;
-window.collection = collection;
-window.addDoc = addDoc;
-window.getDocs = getDocs;
-</script>
 </body>
 
 </html>
+
 
 
 
